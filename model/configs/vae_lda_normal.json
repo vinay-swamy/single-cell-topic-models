@@ -1,0 +1,27 @@
+{
+    "model":{
+        "encoder_fn":"NormalEncoderLDA",
+        "encoder_kwargs":{
+            "vocab_size":5000,
+            "n_topics" :250,
+            "dropout": 0.1
+        },
+        "decoder_fn":"DecoderLDA",
+        "decoder_kwargs":{
+            "vocab_size":5000,
+            "n_topics":250,
+            "normalize_beta":true
+        },
+        "reparameterizer":"LogNormalReparameterizer"
+    },
+    "data":{},
+    "trainer":{},
+    "optim": {
+        "optim_fn": "torch.optim.Adam",
+        "optim_kwargs": {
+          "lr": 1e-4,
+          "weight_decay": 0,
+          "betas": [0.9, 0.999]
+        }
+      }
+}
