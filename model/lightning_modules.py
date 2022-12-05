@@ -4,6 +4,12 @@ import pytorch_lightning as pl
 import torch.nn.functional as F
 from layers import *
 
+class LitDataModule(pl.LightningDataModule):
+    def __init__(self):
+        super().__init__()
+        
+
+
 class LitVAE(pl.LightningModule):
     '''
     https://towardsdatascience.com/variational-autoencoder-demystified-with-pytorch-implementation-3a06bee395ed
