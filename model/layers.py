@@ -50,7 +50,19 @@ class DecoderLDA(nn.Module):
         else:
             _beta = self.beta
         x_hat = torch.matmul(theta, _beta)
-        return x_hat, _beta
+        return x_hat
+    def get_beta(self):
+        training = False
+        if self.training:
+            training=True
+            self.eval()
+        with torch.no_grad():
+            beta = self.beta.clone()
+        if self.normalize_beta:
+            beta= F.softmax(beta, dim=-1)
+        if training:
+            self.train()
+        return beta 
 
 class DecoderETM(nn.Module):
     def __init__(self,vocab_size,n_topics,normalize_beta, rho_path):
@@ -66,7 +78,23 @@ class DecoderETM(nn.Module):
         if self.normalize_beta:
             beta= F.softmax(beta, dim=-1)
         x_hat = torch.matmul(theta, beta)
-        return x_hat, beta 
+        return x_hat
+    def get_beta(self):
+        training = False
+        if self.training:
+            training=True
+            self.eval()
+        with torch.no_grad():
+            beta = torch.matmul(self.alpha, self.rho)
+        if self.normalize_beta:
+            beta= F.softmax(beta, dim=-1)
+        if training:
+            self.train()
+        return beta 
+
+            
+
+
 
 class LogNormalReparameterizer(nn.Module):
     def forward(self, x):

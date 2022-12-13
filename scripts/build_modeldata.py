@@ -7,7 +7,7 @@ import torch
 import glob
 import sys
 from sklearn.model_selection import train_test_split
-stem ="/data/vss2134/scTopic/data/sciplex_counts_5kg"
+#stem ="/data/vss2134/scTopic/data/sciplex_counts_5kg"
 #%%
 stem = sys.argv[1]
 
@@ -57,7 +57,10 @@ drop_groups = drop_groups[drop_groups< 100].reset_index(drop = False)
 drop_barcodes = cell_meta_data.merge(drop_groups, how = 'inner')['cell']
 cell_meta_data_filtered = cell_meta_data.pipe(
     lambda x: x[~x.cell.isin(drop_barcodes)]
-)
+).assign(
+    group = lambda x: x["cell_type"] + ":" +  x["dose_pattern"].astype(str) + ":" + x["dose"].astype(str) + ":" + x["treatment"]
+).pipe(lambda x: x[~x.cell_type.isna()])
+#%%
 
 
 
@@ -75,6 +78,8 @@ val_split = test_val_split.pipe(lambda x: x[~x.cell.isin(test_split['cell'])])
 
 # %%
 torch.save(allcounts, f"{stem}/count.pt")
+torch.save(rho_tensor, f"{stem}/rho_tensor.pt")
 train_split.to_csv(f"{stem}/train.csv", index = False)
 val_split.to_csv(f"{stem}/val.csv", index = False)
 test_split.to_csv(f"{stem}/test.csv", index = False)
+# %%
