@@ -6,11 +6,12 @@ import pickle
 import torch
 import glob
 import sys
-from sklearn.model_selection import train_test_split
+
+#%%
 #stem ="/data/vss2134/scTopic/data/sciplex_counts_5kg"
 #%%
 stem = sys.argv[1]
-
+#%%
 allcounts = sp.io.mmread(f"{stem}/counts.mtx").tocsr()
 #%%
 target_genes = pd.read_csv(f"{stem}/counts.mtx.colnames", names = ['gene_id']).assign(
@@ -21,7 +22,7 @@ cell_barcodes = pd.read_csv(f"{stem}/counts.mtx.rownames", names = ['barcode'])
 
 # %%
 avail_proteins = pd.DataFrame().assign(path = glob.glob("/data/vss2134/scTopic/data/protein_embedding/GRCH38/*")).assign(
-    transcript_id = lambda x: x.path.str.findall("ENST\d+").apply(lambda x: x[0]) )
+    transcript_id = lambda x: x.path.str.findall("ENST\d+").apply(lambda x: x[0]))
 # %%
 gene_mappings = pd.read_csv("/data/vss2134/scTopic/data/grch38_protein_seqs.csv").merge(
     target_genes
@@ -51,7 +52,7 @@ cell_meta_data = pd.read_csv("/data/vss2134/scTopic/data/GSM4150378_sciPlex3_pDa
 ).reset_index(drop = False)
 assert cell_meta_data.shape[0] == cell_barcodes.shape[0]
 # %%
-drop_groups = cell_meta_data.groupby(["cell_type", "dose_pattern", "dose", "treatment"]).size().sort_values()
+drop_groups = cell_meta_data.groupby(["cell_type", "dose_pattern", "dose", "treatment", "time_point"]).size().sort_values()
 drop_groups = drop_groups[drop_groups< 100].reset_index(drop = False)
 
 drop_barcodes = cell_meta_data.merge(drop_groups, how = 'inner')['cell']

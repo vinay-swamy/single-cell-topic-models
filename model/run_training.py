@@ -9,19 +9,17 @@ import os
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 
-configfile  = "/data/vss2134/scTopic/model/configs/vae_lda_normal.json"
-with open(configfile) as m_stream:
-    mconfig = json.load(m_stream)
 #%%
+
 
 args = sys.argv[1:]
 if len(args) == 1:
     ## using a run 
-    configfile =  sys.argv[1]
+    configfile =  args[0]
     with open(configfile) as m_stream:
         mconfig = json.load(m_stream)
 elif args[1] == "TEST":
-    configfile =  sys.argv[1]
+    configfile =  args[0]
     with open(configfile) as m_stream:
         mconfig = json.load(m_stream)
     mconfig['trainer']['max_epochs']=1

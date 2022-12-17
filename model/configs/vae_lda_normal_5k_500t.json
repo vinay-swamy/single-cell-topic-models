@@ -3,13 +3,13 @@
         "encoder_fn":"NormalEncoderLDA",
         "encoder_kwargs":{
             "vocab_size":5000,
-            "n_topics" :250,
+            "n_topics" :500,
             "dropout": 0.1
         },
         "decoder_fn":"DecoderLDA",
         "decoder_kwargs":{
             "vocab_size":5000,
-            "n_topics":250,
+            "n_topics":500,
             "normalize_beta":true
         },
         "reparameterizer":"NormalReparameterizer"
@@ -25,9 +25,9 @@
     },
     "trainer":{
 
-        "max_epochs" : 10,
+        "max_epochs" : 25,
         "accelerator" : "gpu",
-        "devices" : "1"        
+        "devices" : "1"
     },
     "optim": {
         "optim_fn": "torch.optim.Adam",

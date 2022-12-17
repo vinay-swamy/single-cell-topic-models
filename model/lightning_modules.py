@@ -4,13 +4,12 @@ import pytorch_lightning as pl
 import torch.nn.functional as F
 from layers import *
 import numpy as np 
-from itertools import chain 
 import pandas as pd 
 from data import CountMatrixDataset, Collater
-from copy import deepcopy
 from torch.utils.data import DataLoader
+from itertools import combinations
 
-NUM_WORKERS=6
+NUM_WORKERS=3
 class LitDataModule(pl.LightningDataModule):
     def __init__(self, mconfig):
         super().__init__()
@@ -62,6 +61,8 @@ class LitVAE(pl.LightningModule):
         self.val_theta = None
         self.val_beta  = None
         self.val_s_idx = None
+        self.tau = 0.325
+        self.n_topics = model_config['encoder_kwargs']['n_topics']
     def forward(self, X):
          ## the tensor you choose MUST be the same datatype as the tensor you are creating 
         latent_dist_params = self.encoder(X)
@@ -70,12 +71,11 @@ class LitVAE(pl.LightningModule):
         # z via `q.rsample()` internally implements the re-parameterization trick
         # so gradients should be able to work here
         # https://pytorch.org/docs/stable/distributions.html
-        theta = self.reparameterizer(latent_dist_params)
-        X_hat = self.decoder(theta)
+        theta_logits = self.reparameterizer(latent_dist_params)
+        X_hat, theta = self.decoder(theta_logits)
         RC_loss = self.reconstruction_loss(X,X_hat)
         KL_loss = self.reparameterizer.KL(theta, latent_dist_params)
-        elbo =  KL_loss + RC_loss
-        #elbo = RC_loss
+        elbo =  (KL_loss *(self.tau) )  + RC_loss
 
         return elbo, KL_loss, RC_loss, theta, X_hat
         
@@ -83,11 +83,12 @@ class LitVAE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         ## X is batch of tokenized and padded protein seqs
         X, s_idx, group=batch
+        batch_size = X.shape[0]
         elbo, KL_loss, RC_loss, theta, X_hat = self.forward(X)
         loss = elbo.mean() ## sum ?
-        self.log("train_avg_ELBO_loss", loss)
-        self.log("train_avg_RC_loss", RC_loss.mean())
-        self.log("train_avg_KL_loss", KL_loss.mean())
+        self.log("train_avg_ELBO_loss", loss, batch_size=batch_size )
+        self.log("train_avg_RC_loss", RC_loss.mean(), batch_size=batch_size )
+        self.log("train_avg_KL_loss", KL_loss.mean(), batch_size=batch_size)
         return {"loss": loss, 
                 "x_hat":X_hat.detach().cpu().numpy(), 
                 "theta": theta.detach().cpu().numpy(),
@@ -96,11 +97,12 @@ class LitVAE(pl.LightningModule):
                 }
     def validation_step(self, batch, batch_idx):
         X, s_idx, group=batch
+        batch_size = X.shape[0]
         elbo, KL_loss, RC_loss, theta, X_hat = self.forward(X)
         loss = elbo.mean() ## sum ?
-        self.log("val_avg_ELBO_loss", loss)
-        self.log("val_avg_RC_loss", RC_loss.mean())
-        self.log("val_avg_KL_loss", KL_loss.mean())
+        self.log("val_avg_ELBO_loss", loss, batch_size=batch_size )
+        self.log("val_avg_RC_loss", RC_loss.mean(), batch_size=batch_size )
+        self.log("val_avg_KL_loss", KL_loss.mean(), batch_size=batch_size )
         return {"loss": loss, 
                 "x_hat":X_hat.detach().cpu().numpy(), 
                 "theta": theta.detach().cpu().numpy(),
@@ -111,9 +113,22 @@ class LitVAE(pl.LightningModule):
     def validation_epoch_end(self, validation_step_outputs):    
         self.calc_per_epoch_metrics(validation_step_outputs, "val")
         return
+    def predict_step(self,batch, batch_idx):
+        X, s_idx, group=batch
+        batch_size = X.shape[0]
+        elbo, KL_loss, RC_loss, theta, X_hat = self.forward(X)
+        loss = elbo.mean() ## sum ?
+        return {"loss": loss, 
+                "x_hat":X_hat.detach().cpu().numpy(), 
+                "theta": theta.detach().cpu().numpy(),
+                "s_idx":s_idx.detach().cpu().numpy(),
+                "group":group
+                }
+    def predict_epoch_end(self,ops):
+        return ops 
 
     
-    def train_epoch_end(self, train_step_outputs):
+    def training_epoch_end(self, train_step_outputs):
         self.calc_per_epoch_metrics(train_step_outputs, "train")
         return
 
@@ -129,25 +144,34 @@ class LitVAE(pl.LightningModule):
                 g = b_group[i]
                 t = b_theta[i]
                 if g in topics_per_group:
-                    topics_per_group[g]+ t.tolist()
+                    topics_per_group[g].append(t)
                 else:
-                    topics_per_group[g] = t.tolist()
-        all_group_topic_std = []
-        for group in topics_per_group.values():
-            all_group_topic_std.append(np.std(group))
-        all_group_topic_std = np.array(all_group_topic_std)
-        med_theta_std = np.median(all_group_topic_std)
-        mean_theta_std = np.mean(all_group_topic_std)
+                    topics_per_group[g]=[t]
 
+        all_theta_topic_jac = []
+        all_theta_topic_cor = []
+        for group in topics_per_group.values():
+            ## theta is cells x topics
+            all_group_theta = np.array(group)
+            group_theta_jac = topn_pw_jac(all_group_theta, int(self.n_topics/10), 1000)
+            all_theta_topic_jac.append(group_theta_jac)
+            cor_mat=  pd.DataFrame(all_group_theta.T).corr(method = "spearman").to_numpy()
+            med_group_theta_cor = np.median(cor_mat[np.triu_indices(cor_mat.shape[0], k=1 )])
+            all_theta_topic_cor.append(med_group_theta_cor)
+
+
+        med_theta_jac = np.median(all_theta_topic_jac)
+        med_theta_corr = np.median(all_theta_topic_cor)
         ## calculate pairwise correlation between topics
         beta = self.decoder.get_beta().detach().cpu().numpy()
-        cor_mat=  pd.DataFrame(beta).corr(method = "spearman").to_numpy()
+        cor_mat=  pd.DataFrame(beta.T).corr(method = "spearman").to_numpy()
         med_beta_cor = np.median(cor_mat[np.triu_indices(cor_mat.shape[0], k=1 )])
-        mean_beta_cor = np.mean(cor_mat[np.triu_indices(cor_mat.shape[0], k=1 )])
-        self.log(f"{dtype}_med_group_topic_std", med_theta_std)
-        self.log(f"{dtype}_mean_group_topic_std", mean_theta_std)
-        self.log(f"{dtype}_med_pw_topic_corr", med_beta_cor)
-        self.log(f"{dtype}_mean_pw_topic_corr", mean_beta_cor)
+        med_beta_jac = topn_pw_jac(beta, 100, 1000000)
+    
+        self.log(f"{dtype}_med_group_theta_topic_corr", med_theta_corr)
+        self.log(f"{dtype}_med_group_theta_topic_jac", med_theta_jac)
+        self.log(f"{dtype}_med_pw_beta_gene_corr", med_beta_cor)
+        self.log(f"{dtype}_med_pw_beta_gene_jac", med_beta_jac)
         return 
         
 
@@ -172,3 +196,17 @@ class LitVAE(pl.LightningModule):
 
         return ret_val
 # %%
+def jaccard_like(l1, l2):
+    intersect = len(l1.intersection(l2))
+    return intersect / len(l2)
+def topn_pw_jac(all_group_theta, n, ss):
+    pairs = np.array(list(combinations(list(range(all_group_theta.shape[0])), 2)))
+    if len(pairs) > ss:
+        idxs = np.random.choice(len(pairs), size = ss)
+        pairs = pairs[idxs]
+    res = []
+    for p in pairs:
+        l = set(np.argpartition(all_group_theta[p[0], :], -n)[-n:])
+        r = set(np.argpartition(all_group_theta[p[1], :], -n)[-n:])
+        res.append(jaccard_like(l,r))
+    return np.median(res)

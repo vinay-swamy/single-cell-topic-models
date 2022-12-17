@@ -1,0 +1,42 @@
+{
+    "model":{
+        "encoder_fn":"NormalEncoderLDA",
+        "encoder_kwargs":{
+            "vocab_size":5000,
+            "n_topics" :100,
+            "dropout": 0.1
+        },
+        "decoder_fn":"DecoderLDA",
+        "decoder_kwargs":{
+            "vocab_size":5000,
+            "n_topics":100,
+            "normalize_beta":true
+        },
+        "reparameterizer":"NormalReparameterizer"
+    },
+    "data":{
+        "root_dir":"/data/vss2134/scTopic/data/sciplex_counts_5kg",
+        "batch_size":1024,
+        "count_file":"count.pt",
+        "train_md":"train.csv",
+        "val_md":"val.csv",
+        "test_md":"test.csv"
+        
+    },
+    "trainer":{
+
+        "max_epochs" : 25,
+        "accelerator" : "gpu",
+        "devices" : "1"
+    },
+    "optim": {
+        "optim_fn": "torch.optim.Adam",
+        "optim_kwargs": {
+          "lr": 1e-4,
+          "weight_decay": 0,
+          "betas": [0.9, 0.999]
+        }
+    },
+    "wandb_project":"scTopic",
+    "dryrun":false
+}
